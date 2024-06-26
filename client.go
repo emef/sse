@@ -46,6 +46,7 @@ type Client struct {
 	connectedcb       ConnCallback
 	subscribed        map[chan *Event]chan struct{}
 	Headers           map[string]string
+	Method            string
 	ReconnectNotify   backoff.Notify
 	ResponseValidator ResponseValidator
 	Connection        *http.Client
@@ -63,6 +64,7 @@ func NewClient(url string, opts ...func(c *Client)) *Client {
 		URL:           url,
 		Connection:    &http.Client{},
 		Headers:       make(map[string]string),
+		Method:        http.MethodGet,
 		subscribed:    make(map[chan *Event]chan struct{}),
 		maxBufferSize: 1 << 16,
 	}
@@ -289,7 +291,12 @@ func (c *Client) OnConnect(fn ConnCallback) {
 }
 
 func (c *Client) request(ctx context.Context, stream string) (*http.Response, error) {
-	req, err := http.NewRequest("GET", c.URL, nil)
+	method := http.MethodGet
+	if c.Method != "" {
+		method = c.Method
+	}
+
+	req, err := http.NewRequest(method, c.URL, nil)
 	if err != nil {
 		return nil, err
 	}
