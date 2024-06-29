@@ -77,14 +77,14 @@ func NewClient(url string, opts ...func(c *Client)) *Client {
 }
 
 // Subscribe to a data stream
-func (c *Client) Subscribe(stream string, handler func(msg *Event)) error {
-	return c.SubscribeWithContext(context.Background(), stream, handler)
+func (c *Client) Subscribe(body []byte, handler func(msg *Event)) error {
+	return c.SubscribeWithContext(context.Background(), body, handler)
 }
 
 // SubscribeWithContext to a data stream with context
-func (c *Client) SubscribeWithContext(ctx context.Context, stream string, handler func(msg *Event)) error {
+func (c *Client) SubscribeWithContext(ctx context.Context, body []byte, handler func(msg *Event)) error {
 	operation := func() error {
-		resp, err := c.request(ctx, stream)
+		resp, err := c.request(ctx, body)
 		if err != nil {
 			return err
 		}
@@ -123,12 +123,12 @@ func (c *Client) SubscribeWithContext(ctx context.Context, stream string, handle
 }
 
 // SubscribeChan sends all events to the provided channel
-func (c *Client) SubscribeChan(stream string, ch chan *Event) error {
-	return c.SubscribeChanWithContext(context.Background(), stream, ch)
+func (c *Client) SubscribeChan(body []byte, ch chan *Event) error {
+	return c.SubscribeChanWithContext(context.Background(), body, ch)
 }
 
 // SubscribeChanWithContext sends all events to the provided channel with context
-func (c *Client) SubscribeChanWithContext(ctx context.Context, stream string, ch chan *Event) error {
+func (c *Client) SubscribeChanWithContext(ctx context.Context, body []byte, ch chan *Event) error {
 	var connected bool
 	errch := make(chan error)
 	c.mu.Lock()
@@ -136,7 +136,7 @@ func (c *Client) SubscribeChanWithContext(ctx context.Context, stream string, ch
 	c.mu.Unlock()
 
 	operation := func() error {
-		resp, err := c.request(ctx, stream)
+		resp, err := c.request(ctx, body)
 		if err != nil {
 			return err
 		}
@@ -252,22 +252,22 @@ func (c *Client) readLoop(reader *EventStreamReader, outCh chan *Event, erChan c
 
 // SubscribeRaw to an sse endpoint
 func (c *Client) SubscribeRaw(handler func(msg *Event)) error {
-	return c.Subscribe("", handler)
+	return c.Subscribe(nil, handler)
 }
 
 // SubscribeRawWithContext to an sse endpoint with context
 func (c *Client) SubscribeRawWithContext(ctx context.Context, handler func(msg *Event)) error {
-	return c.SubscribeWithContext(ctx, "", handler)
+	return c.SubscribeWithContext(ctx, nil, handler)
 }
 
 // SubscribeChanRaw sends all events to the provided channel
 func (c *Client) SubscribeChanRaw(ch chan *Event) error {
-	return c.SubscribeChan("", ch)
+	return c.SubscribeChan(nil, ch)
 }
 
 // SubscribeChanRawWithContext sends all events to the provided channel with context
 func (c *Client) SubscribeChanRawWithContext(ctx context.Context, ch chan *Event) error {
-	return c.SubscribeChanWithContext(ctx, "", ch)
+	return c.SubscribeChanWithContext(ctx, nil, ch)
 }
 
 // Unsubscribe unsubscribes a channel
@@ -290,24 +290,22 @@ func (c *Client) OnConnect(fn ConnCallback) {
 	c.connectedcb = fn
 }
 
-func (c *Client) request(ctx context.Context, stream string) (*http.Response, error) {
+func (c *Client) request(ctx context.Context, body []byte) (*http.Response, error) {
 	method := http.MethodGet
 	if c.Method != "" {
 		method = c.Method
 	}
 
-	req, err := http.NewRequest(method, c.URL, nil)
+	var bodyReader io.Reader
+	if body != nil {
+		bodyReader = bytes.NewReader(body)
+	}
+
+	req, err := http.NewRequest(method, c.URL, bodyReader)
 	if err != nil {
 		return nil, err
 	}
 	req = req.WithContext(ctx)
-
-	// Setup request, specify stream to connect to
-	if stream != "" {
-		query := req.URL.Query()
-		query.Add("stream", stream)
-		req.URL.RawQuery = query.Encode()
-	}
 
 	req.Header.Set("Cache-Control", "no-cache")
 	req.Header.Set("Accept", "text/event-stream")
